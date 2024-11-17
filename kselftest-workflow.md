@@ -1,10 +1,14 @@
 # Kselftest workflow
+We will run eBPF kselftests on a QEMU instance.
 
-I am trying to run it for eBPF tests. 
-
-1. Clone the latest kernel. You can find the closest mirror by running `ping git.kernel.org`, and it will start pinging the nearest kernel to you.
+## Setup
+1. Clone the latest kernel. You can find the closest mirror by running `ping git.kernel.org`, and it will start pinging the nearest kernel to you. _This will take anywhere between 5-20 mins, depending on traffic on the mirrors._
 	```bash
-	git clone https://nyc.source.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+	git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+	```
+3. Change into the cloned linux source code directory
+	```
+	cd linux
 	```
 
 2. Generate the configs by running
@@ -26,7 +30,7 @@ I am trying to run it for eBPF tests.
 	CONFIG_KALLSYMS_ALL=y
 
 	CONFIG_NAMESPACES=y
-	CONFIG_UTS_NS=`y
+	CONFIG_UTS_NS=y
 	CONFIG_IPC_NS=y
 	CONFIG_PID_NS=y
 	CONFIG_NET_NS=y
@@ -108,6 +112,7 @@ I am trying to run it for eBPF tests.
 	# end of HID-BPF support
 	CONFIG_BPF_EVENTS=y
 	CONFIG_TEST_BPF=m
+	CONFIG_DEBUG_INFO=y
 	CONFIG_DEBUG_INFO_BTF=y
 	CONFIG_PAHOLE_HAS_SPLIT_BTF=y
 	CONFIG_DEBUG_INFO_BTF_MODULES=y
@@ -119,35 +124,35 @@ I am trying to run it for eBPF tests.
 	make olddefconfig
 	```
 
-6. Use ccache to compile the kernel. This will greatly improve the kernel compilation times. You can replace gcc with clang, as per your needs.
+6. Use `ccache` to compile the kernel. This will greatly improve the kernel compilation times. You can replace gcc with clang, as per your needs. _This will take about 30-40 mins on the first run, depending on PC specs. Subsequent compiles should be under 5 mins, provided you have an SSD._
 	```bash
 	time make CC="ccache gcc" -j`nproc`
 	```
 
-7. Make sure to create a qemu disk by using the syzkaller provided `create-image.sh` in a separate directory
+7. Make sure to create a qemu disk by using the syzkaller provided `create-image.sh` in a separate directory. _This may take about 5-15 mins depending on PC specs and internet speed._
 	```bash
 	mkdir image
 	cd image
 	wget "https://raw.githubusercontent.com/google/syzkaller/master/tools/create-image.sh" -O create-image.sh
 	chmod +x create-image.sh
-	./create-image.sh --distribution bookworm -s 20480
+	ADD_PACKAGE="make,sysbench,git,vim,cscope,universal-tags,tmux,usbutils,tcpdump,build-essential,libelf-dev,libcap-dev,binutils-dev,libssl-dev,libzstd-dev" ./create-image.sh --distribution bookworm -s 20480 --feature full
 	```
 
-8. I use a custom `run-vm.sh` script that I made to run the VM
+8. I use a custom `run-vm.sh` script that I made to run the VM.
 	```bash
 	#!/bin/bash
 	LINUX_SRC=linux
-	RAM=16
+	RAM=8G
 	CORES=16
 	qemu-system-x86_64 \
-		-m $RAMG \
+		-m $RAM \
 		-smp $CORES \
 		-kernel $LINUX_SRC/arch/x86/boot/bzImage \
 		-append "console=ttyS0 root=/dev/sda earlyprintk=serial net.ifnames=0" \
 		-drive file=image/bookworm.img,format=raw \
 		-net user,host=10.0.2.10,hostfwd=tcp:127.0.0.1:10021-:22 \
 		-net nic,model=e1000 \
-		-virtfs local,path=$LINUX_SRC,mount_tag=linuxshare,security_model=mapped,id=linuxshare \
+		-virtfs local,path=$LINUX_SRC,mount_tag=linuxshare,security_model=none,id=linuxshare \
 		-enable-kvm \
 		-nographic \
 		-pidfile vm.pid \
@@ -166,21 +171,32 @@ I am trying to run it for eBPF tests.
 	mount -t 9p -o trans=virtio,version=9p2000.L linuxshare linux
 	```
 
-11. Install the necessary tools for working with the kernel in the VM
+11. For eBPF specific stuff
 	```bash
-	apt update
-	apt install -y git build-essential vim cscope universal-ctags
+	apt install -y llvm-16 clang-16 lld-16 libelf-dev libcap-dev binutils-dev
 	```
 
-12. For eBPF specific stuff
+12. Make sure the system uses the installed clang and llvm as default
 	```bash
-	apt install -y llvm-16 clang-16 libelf-dev
-	```
-
-13. Make sure the system uses the installed clang and llvm as default
-	```
 	update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-16 200
+	update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-16 200
 	update-alternatives --install /usr/bin/clang clang /usr/bin/clang-16 200
+	update-alternatives --install /usr/bin/lld lld /usr/bin/lld-16 200
+	```
+
+13. We will attempt to compile and install `bpftool`. If it compiles successfully, it means our system is ready for BPF.
+	```bash
+	cd linux
+	cd tools/bpf/bpftool
+	make -j`nproc`
+	```
+
+	Make sure that `clang-bpf-co-re`, `llvm`, `libcap` and `libbfd` are 'ON'.
+
+	Then, we install `bpftool`
+
+	```bash
+	make install
 	```
 
 ## Runnings `kselftests`
@@ -194,11 +210,24 @@ I am trying to run it for eBPF tests.
 	mount -t 9p -o trans=virtio,version=9p2000.L linuxshare linux
 	```
 
-3. Run the following to build the `kselftests`. These steps are taken from [here](https://docs.kernel.org/dev-tools/kselftest.html)
+3. Run the following to build the `kselftests`. These steps are taken from [here](https://docs.kernel.org/dev-tools/kselftest.html). _This will take a while, since we can't compile the BPF selftests parallely (potential TODO?). Took me about 
 	```bash
 	cd linux
-	make TARGETS="bpf" kselftest
+	cd tools/testing/selftests/bpf
+	make
 	```
+
+## Issues fixed along the way
+1. make: stat: disasm.c: Too many levels of symbolic links: Fixed this by changing the `virtfs` flags. Changed `security_model=mapped` to `security_model=none`. More info: [Documentation/9psetup - QEMU](https://wiki.qemu.org/Documentation/9psetup)
+
+2. `fatal error: openssl/opensslv.h: No such file or directory`: Fixed by installing `libssl-dev` package.
+
+3. `clang: error: invalid linker name in argument '-fuse-ld=lld'`: Fixed by installing the `lld-16` package.
+
+4. `ld.lld: error: unable to find library -lzstd`: Fixed by installing the `libzstd-dev` package.
+
+5. `Makefile.docs:77: *** "rst2man not found, but required to generate man pages".  Stop.`: Fixed by installing `docutils-common` package.
+
 
 
 ## Browsing the linux kernel
