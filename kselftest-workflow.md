@@ -6,18 +6,19 @@ We will run eBPF kselftests on a QEMU instance.
 	```bash
 	git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 	```
-3. Change into the cloned linux source code directory
+
+2. Change into the cloned linux source code directory
 	```
 	cd linux
 	```
 
-2. Generate the configs by running
+3. Generate the configs by running
 	```bash
 	make defconfig
 	make kvm_guest.config
 	```
 
-3. Enable required config options from syzkaller, mentioned [here](https://github.com/google/syzkaller/blob/master/docs/linux/kernel_configs.md)
+4. Enable required config options for QEMU and syzkaller, mentioned [here](https://github.com/google/syzkaller/blob/master/docs/linux/kernel_configs.md).
 	```bash
 	cat <<EOL >> .config
 	CONFIG_KCOV=y
@@ -87,7 +88,7 @@ We will run eBPF kselftests on a QEMU instance.
 	EOL
 	```
 
-4. Enable additional configs as required. You can use `make menuconfig` to enable BPF, which I will be using in my case. Or you could add the following:
+5. Enable additional configs as required. You can use `make menuconfig` to enable BPF, which I will be using in my case. Or you could add the following:
 	```bash
 	cat <<EOL >> .config
 	CONFIG_BPF=y
@@ -119,17 +120,18 @@ We will run eBPF kselftests on a QEMU instance.
 	CONFIG_PROBE_EVENTS_BTF_ARGS=y
 	EOL
 	```
-5. To finalize the config, run
+
+6. Finalize the config.
 	```bash
 	make olddefconfig
 	```
 
-6. Use `ccache` to compile the kernel. This will greatly improve the kernel compilation times. You can replace gcc with clang, as per your needs. _This will take about 30-40 mins on the first run, depending on PC specs. Subsequent compiles should be under 5 mins, provided you have an SSD._
+7. Use `ccache` to compile the kernel. This will greatly improve the kernel compilation times. You can replace gcc with clang, as per your needs. _This will take about 30-40 mins on the first run, depending on PC specs. Subsequent compiles should be under 5 mins, provided you have an SSD._
 	```bash
 	time make CC="ccache gcc" -j`nproc`
 	```
 
-7. Make sure to create a qemu disk by using the syzkaller provided `create-image.sh` in a separate directory. _This may take about 5-15 mins depending on PC specs and internet speed._
+8. Make sure to create a qemu disk by using the syzkaller provided `create-image.sh` in a separate directory. _This may take about 5-15 mins depending on PC specs and internet speed._
 	```bash
 	mkdir image
 	cd image
@@ -138,7 +140,7 @@ We will run eBPF kselftests on a QEMU instance.
 	ADD_PACKAGE="make,sysbench,git,vim,cscope,universal-tags,tmux,usbutils,tcpdump,build-essential,libelf-dev,libcap-dev,binutils-dev,libssl-dev,libzstd-dev" ./create-image.sh --distribution bookworm -s 20480 --feature full
 	```
 
-8. I use a custom `run-vm.sh` script that I made to run the VM.
+9. I use a custom `run-vm.sh` script that I made to run the VM.
 	```bash
 	#!/bin/bash
 	LINUX_SRC=linux
@@ -160,23 +162,23 @@ We will run eBPF kselftests on a QEMU instance.
 		2>&1 | tee vm.log
 	```
 
-9. You can ssh into the VM by running the following:
+10. You can ssh into the VM by running the following:
 	```bash
 	ssh -i image/bookworm.id_rsa -p 10021 -o "StrictHostKeyChecking no" root@localhost
 	```
 
-10. To mount the linux source code directory inside the VM, you can run the following INSIDE the VM
+11. To mount the linux source code directory inside the VM, you can run the following INSIDE the VM
 	```bash
 	mkdir linux
 	mount -t 9p -o trans=virtio,version=9p2000.L linuxshare linux
 	```
 
-11. For eBPF specific stuff
+12. For eBPF specific stuff
 	```bash
 	apt install -y llvm-16 clang-16 lld-16 libelf-dev libcap-dev binutils-dev
 	```
 
-12. Make sure the system uses the installed clang and llvm as default
+13. Make sure the system uses the installed clang and llvm as default
 	```bash
 	update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-16 200
 	update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-16 200
@@ -184,7 +186,7 @@ We will run eBPF kselftests on a QEMU instance.
 	update-alternatives --install /usr/bin/lld lld /usr/bin/lld-16 200
 	```
 
-13. We will attempt to compile and install `bpftool`. If it compiles successfully, it means our system is ready for BPF.
+14. We will attempt to compile and install `bpftool`. If it compiles successfully, it means our system is ready for BPF.
 	```bash
 	cd linux
 	cd tools/bpf/bpftool
