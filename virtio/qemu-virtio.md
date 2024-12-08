@@ -67,9 +67,11 @@ CONFIG_9P_FS=y
 CONFIG_9P_FS_POSIX_ACL=y
 CONFIG_PCI=y
 CONFIG_VIRTIO_PCI=y
+
+CONFIG_DRM_VIRTIO_GPU=m
 ```
 
-## Host setup
+## SSH Host setup
 1. Install `xorg-xauth` on the server.
 2. Edit `/etc/ssh/sshd_config`, change `X11Forwarding no` to yes.
 3. Modify `run-vm.sh`. Remove `-nographic` and add the following
@@ -78,7 +80,7 @@ CONFIG_VIRTIO_PCI=y
 	-device virtio-pci-gpu
 	```
 
-## Client setup
+## SSH Client setup
 Add the following to `~/.ssh/config`
 ```
 Host *
@@ -87,5 +89,20 @@ Host *
 ```
 
 Now you can run `ssh -X <ip_addr>` to login to you development server
+
+## VM setup
+We will have to use an Ubuntu 24.04 VM, since debian doesn't come with the latest GCC (gcc-14), which is needed to install and compile modules on the VM.
+
+We can use [create-image-ubuntu.sh](create-image-ubuntu.sh) for making a QEMU bootable Ubuntu image.
+
+Once done, make sure to install `oftware-properties-common`.
+
+Then, run `add-apt-repository universe` to be able to download gcc-14
+
+To install gcc-14, run `apt install gcc-14`
+
+Then finally to make gcc-14 as the default gcc (gcc-13 is used as default), run `update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 200`.
+
+You should now have a compatible VM to test your kernel and the modules built for it.
 
 You can use https://github.com/dvdhrm/docs to check if your display is working as intended
