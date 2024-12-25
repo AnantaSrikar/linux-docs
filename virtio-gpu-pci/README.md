@@ -4,7 +4,7 @@ In this experiment, we will setup virtio-gpu-pci and try to make a simple driver
 2. How the virtio-gpu-pci works
 
 ## Setup
-1. Compile the linux kernel with the following options:
+1. Compile the linux kernel with the following options, or use [setup-kernel.sh](scripts/setup-kernel.sh) for faster setup.
 	```bash
 	CONFIG_KCOV=y
 	CONFIG_KCOV_INSTRUMENT_ALL=y
@@ -71,12 +71,15 @@ In this experiment, we will setup virtio-gpu-pci and try to make a simple driver
 	CONFIG_DRM_VIRTIO_GPU=m
 	```
 
-Now you can run `ssh -X <ip_addr>` to login to you development server
+2. If you compiled the kernel manually without using the script, make sure to build the modules as well.
+	```bash
+	make modules
+	```
 
 ## VM setup
 We have to install the kernel modules to allow us to load and unload the `VIRTIO_DRM` driver. We also have to use an Ubuntu 24.04 VM, since debian doesn't come with the latest GCC (`gcc-14`), which is needed to install and compile modules on the VM.
 
-1. Use [create-image-ubuntu.sh](scripts/create-image-ubuntu.sh) for making a QEMU bootable Ubuntu image.
+1. Use [create-image-ubuntu.sh](scripts/create-image-ubuntu.sh) for making a QEMU bootable Ubuntu image. NOTE: using [create-image.sh](scripts/create-image.sh) would also install all the dependencies needed in the further experimentation. I have included the install commmands just for reference.
 
 2. Boot into the VM using the modified [run-vm.sh](scripts/run-vm.sh), which has the `virtio-gpu-pci` enabled.
 
@@ -92,7 +95,7 @@ We have to install the kernel modules to allow us to load and unload the `VIRTIO
 
 5. Install `gcc-14` using apt.
 	```bash
-	apt install gcc-14
+	apt install gcc-14 -y
 	```
 
 6. Make `gcc-14` as the default gcc (gcc-13 is used by default).
@@ -118,7 +121,7 @@ You should now have a compatible VM to test your kernel and the modules built fo
 ## Checking if DRI is working
 1. Install `pkg-config` for buidling the dvdhrm project.
 	```bash
-	apt install pkg-config
+	apt install pkg-config -y
 	```
 2. Clone the `dvdhrm/docs` project. This is good start for testing DRI.
 	```bash
@@ -131,7 +134,12 @@ You should now have a compatible VM to test your kernel and the modules built fo
 	make
 	```
 
-4. 
+4. Run `modeset-atomic` to see if the screen displays something.
+	```bash
+	./modeset-atomic
+	```
+
+If the screen displayed colors changing rapidly, then we have our HW emulation ready! Lets move on to some kernel development.
 
 
 ## Unloading kernel module
@@ -142,6 +150,103 @@ Run the following command to unbind the driver
 echo -n 0000:00:04.0 > /sys/bus/pci/drivers/virtio-pci/unbind
 ```
 
+## Kernel Module Development
+There will be few steps that we will follow:
+1. Register `virtio-gpu-pci` with the DRM subsystem:
+	To do this, we first have to find out the Vendor and Device ID of the `virtio-gpu-pci` device (VID and PID). We can simply run the following to get the info:
+	```bash
+	lspci -s <pci_dev_string> -n
+	```
+
+	The `pci_dev_string` would be something like `00:04.0`, and you can easily find it by running `lspci`. The device we want to target would be something like follows:
+	
+	```bash
+	00:04.0 Display controller: Red Hat, Inc. Virtio 1.0 GPU (rev 01)
+	```
+
+	Now that we have the `pci_dev_string`, run `lspci -s 00:04.0 -n`
+	```bash
+	00:04.0 0380: 1af4:1050 (rev 01)
+	```
+
+	We see that the VID is 0x1af4 and DID is 0x1050
+
+	We can write a simple hello world PCI driver as follows: `pci_virtiogpu.c`
+
+	```c
+	#include <linux/module.h>
+	#include <linux/init.h>
+	#include <linux/pci.h>
+
+	#define PCI_VIRTIOGPU_VENDOR_ID 0x1af4
+	#define PCI_VIRTIOGPU_DEVICE_ID 0x1050
+
+	MODULE_LICENSE("GPL");
+	MODULE_AUTHOR("Ananta Srikar");
+	MODULE_DESCRIPTION("Basic DRM driver for virtio-gpu-pci");
+
+	static struct pci_device_id pci_virtiogpu_ids[] = {
+		{ PCI_DEVICE(PCI_VIRTIOGPU_VENDOR_ID, PCI_VIRTIOGPU_DEVICE_ID) },
+		{ }
+	};
+
+	MODULE_DEVICE_TABLE(pci, pci_virtiogpu_ids);
+
+	static int pci_virtiogpu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+	{
+		pr_info("pci_virtiogpu: PCI probe function called!\n");
+		return 0;
+	}
+
+	static void pci_virtiogpu_remove(struct pci_dev *pdev)
+	{
+		pr_info("pci_virtiogpu: PCI remove function called!\n");
+	}
+
+	static struct pci_driver pci_virtiogpu_driver = {
+		.name = "virtiogpu",
+		.id_table = pci_virtiogpu_ids,
+		.probe = pci_virtiogpu_probe,
+		.remove = pci_virtiogpu_remove,
+	};
+
+	static int __init virtiogpu_init(void)
+	{
+		pr_info("pci_virtiogpu: Kernel module init called!\n");
+		return pci_register_driver(&pci_virtiogpu_driver);
+	}
+
+	static void __exit virtiogpu_exit(void)
+	{
+		pr_info("pci_virtiogpu: Kernel module exit called!\n");
+		pci_unregister_driver(&pci_virtiogpu_driver);
+	}
+
+	module_init(virtiogpu_init);
+	module_exit(virtiogpu_exit);
+	```
+
+	Lets also make a corresponding Makefile for the same
+
+	```Makefile
+	obj-m += pci_virtiogpu.o
+
+	all:
+		make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+	
+	clean:
+		make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	```
+
+	Now, build the module by running `make`.
+
+	Load the kernel module by running `insmod pci_virtiogpu.ko`.
+
+	See and verify the debug logs in `dmesg`.
+
+	Once done, unload the kernel module by running `rmmod pci_virtiogpu.ko`.
+
+	Now, lets add some DRM components to the driver.
 
 ## Modifying QEMU
 We need to modify the virtio-pci-gpu's PCI VENDOR and DEVICE IDs, so that the `virtio-pci` kernel module doesn't take over the device and we can load our kernel module easily. To avoid that, we will modify the QEMU source code.
@@ -190,6 +295,8 @@ Host *
 	ForwardX11 yes
 	ForwardX11Trusted yes
 ```
+
+You could also use `ssh -X ip_address` instead, and it should work.
 
 ## Notes
 - `lspci -s <pci_dev_string> -n` should give you the vendor:device id (the pci_dev_string can be obtained by running lspci, make sure to have pciutils installed)
