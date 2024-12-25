@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ADDITIONAL_PACKAGES="make,git,vim,cscope,universal-ctags,tmux,build-essential,meson,ninja-build,pkg-config,cmake,libdrm-dev,libkmod-dev,libproc2-dev,libdw-dev,libpixman-1-dev,libcairo2-dev,libudev-dev,flex,bison,libdrm-tests,pciutils"
+ADDITIONAL_PACKAGES="make,git,vim,tmux,build-essential,cmake,libdrm-dev,libkmod-dev,libproc2-dev,libdw-dev,libpixman-1-dev,libcairo2-dev,libudev-dev,flex,bison,pciutils,software-properties-common,pkg-config"
 
 mkdir image
 

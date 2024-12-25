@@ -71,48 +71,46 @@ In this experiment, we will setup virtio-gpu-pci and try to make a simple driver
 	CONFIG_DRM_VIRTIO_GPU=m
 	```
 
-2. Boot into the VM, and mount the linux directory
-3. Install the kernel modules
-
-## SSH Host setup for testing on remote servers
-1. Install `xorg-xauth` on the server.
-2. Edit `/etc/ssh/sshd_config`, change `X11Forwarding no` to yes.
-3. Modify `run-vm.sh`. Remove `-nographic` and add the following
-	```bash
-	-vga none
-	-device virtio-pci-gpu
-	```
-
-## SSH Client setup for testing on remote servers
-Add the following to `~/.ssh/config`
-```
-Host *
-	ForwardX11 yes
-	ForwardX11Trusted yes
-```
-
 Now you can run `ssh -X <ip_addr>` to login to you development server
 
 ## VM setup
-We will have to use an Ubuntu 24.04 VM, since debian doesn't come with the latest GCC (`gcc-14`), which is needed to install and compile modules on the VM.
+We have to install the kernel modules to allow us to load and unload the `VIRTIO_DRM` driver. We also have to use an Ubuntu 24.04 VM, since debian doesn't come with the latest GCC (`gcc-14`), which is needed to install and compile modules on the VM.
 
-1. Use [create-image-ubuntu.sh](create-image-ubuntu.sh) for making a QEMU bootable Ubuntu image.
+1. Use [create-image-ubuntu.sh](scripts/create-image-ubuntu.sh) for making a QEMU bootable Ubuntu image.
 
-2. Once done, make sure to install `software-properties-common`
+2. Boot into the VM using the modified [run-vm.sh](scripts/run-vm.sh), which has the `virtio-gpu-pci` enabled.
+
+3. SSH into the running QEMU VM.
 	```bash
-	apt install software-properties-common
+	ssh -i image/noble.id_rsa -p 10021 -o "StrictHostKeyChecking no" root@localhost
 	```
-3. Enable the `universe` apt repository which has the gcc package.
+
+4. Enable the `universe` apt repository which has the gcc package.
 	```bash
 	add-apt-repository universe
 	```
-4. Install `gcc-14` using apt
+
+5. Install `gcc-14` using apt.
 	```bash
 	apt install gcc-14
 	```
-5. Make `gcc-14` as the default gcc (gcc-13 is used by default)
+
+6. Make `gcc-14` as the default gcc (gcc-13 is used by default).
 	```bash
 	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 200
+	```
+
+7. Now, lets install the compiled kernel modules. Mount the linux directory.
+	```bash
+	mkdir linux
+	mount -t 9p -o trans=virtio,version=9p2000.L linuxshare linux
+	```
+
+8. Build and install the modules.
+	```bash
+	cd linux
+	make modules
+	make modules_install
 	```
 
 You should now have a compatible VM to test your kernel and the modules built for it.
@@ -172,6 +170,26 @@ We need to modify the virtio-pci-gpu's PCI VENDOR and DEVICE IDs, so that the `v
 	```
 
 The above method did not work. I may re-visit this later, but my current focus is on figuing out the DRM subsystem.
+
+## SSH setup
+I prefer to use my homeserver for kernel development, due to it being more powerful. I SSH into my machine for the same, here is the config for that as well.
+
+### SSH Host setup
+1. Install `xorg-xauth` on the server.
+2. Edit `/etc/ssh/sshd_config`, change `X11Forwarding no` to yes.
+3. Modify `run-vm.sh`. Remove `-nographic` and add the following
+	```bash
+	-vga none
+	-device virtio-pci-gpu
+	```
+
+### SSH Client setup
+Add the following to `~/.ssh/config`
+```
+Host *
+	ForwardX11 yes
+	ForwardX11Trusted yes
+```
 
 ## Notes
 - `lspci -s <pci_dev_string> -n` should give you the vendor:device id (the pci_dev_string can be obtained by running lspci, make sure to have pciutils installed)

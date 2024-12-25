@@ -78,3 +78,5 @@ EOL
 make "CC=ccache $COMPILER" olddefconfig
 
 time make "CC=ccache $COMPILER" -j$(nproc)
+
+make "CC=ccache $COMPILER" modules
