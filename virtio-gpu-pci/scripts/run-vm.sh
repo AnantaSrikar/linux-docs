@@ -2,7 +2,7 @@
 LINUX_SRC=linux
 RAM=16G
 CORES=16
-IMAGE=noble
+IMAGE=resolute
 qemu-system-x86_64 \
 	-m $RAM \
 	-smp $CORES \

@@ -77,7 +77,7 @@ In this experiment, we will setup virtio-gpu-pci and try to make a simple driver
 	```
 
 ## VM setup
-We have to install the kernel modules to allow us to load and unload the `VIRTIO_DRM` driver. We also have to use an Ubuntu 24.04 VM, since debian doesn't come with the latest GCC (`gcc-14`), which is needed to install and compile modules on the VM.
+We have to install the kernel modules to allow us to load and unload the `VIRTIO_DRM` driver. We will use an Ubuntu 26.04 VM, since debian doesn't come with the latest GCC (`gcc-16`), which is needed to install and compile modules on the VM.
 
 1. Use [create-image-ubuntu.sh](scripts/create-image-ubuntu.sh) for making a QEMU bootable Ubuntu image. NOTE: using [create-image.sh](scripts/create-image.sh) would also install all the dependencies needed in the further experimentation. I have included the install commmands just for reference.
 
@@ -88,31 +88,25 @@ We have to install the kernel modules to allow us to load and unload the `VIRTIO
 	ssh -i image/noble.id_rsa -p 10021 -o "StrictHostKeyChecking no" root@localhost
 	```
 
-4. Enable the `universe` apt repository which has the gcc package.
+4. Install `gcc-16` using apt.
 	```bash
-	add-apt-repository universe
+	apt install gcc-16 -y
 	```
 
-5. Install `gcc-14` using apt.
+5. Make `gcc-16` as the default gcc (gcc-15 is used by default).
 	```bash
-	apt install gcc-14 -y
+	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-16 200
 	```
 
-6. Make `gcc-14` as the default gcc (gcc-13 is used by default).
-	```bash
-	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 200
-	```
-
-7. Now, lets install the compiled kernel modules. Mount the linux directory.
+6. Now, lets install the compiled kernel modules. Mount the linux directory.
 	```bash
 	mkdir linux
 	mount -t 9p -o trans=virtio,version=9p2000.L linuxshare linux
 	```
 
-8. Build and install the modules.
+7. Install the modules.
 	```bash
 	cd linux
-	make modules
 	make modules_install
 	```
 

@@ -14,11 +14,14 @@ fi
 
 # Variables affected by options
 ARCH=$(uname -m)
-RELEASE=noble
+RELEASE=resolute
 FEATURE=minimal
 SEEK=2047
 PERF=false
-HOSTNAME=alkp26
+
+MIRROR=http://plug-mirror.rcac.purdue.edu/ubuntu/
+
+HOSTNAME=kerneldev
 
 # Display help function
 display_help() {
@@ -115,7 +118,7 @@ if $FOREIGN; then
 fi
 
 # Run debootstrap
-sudo debootstrap $DEBOOTSTRAP_PARAMS http://archive.ubuntu.com/ubuntu/
+sudo debootstrap $DEBOOTSTRAP_PARAMS "$MIRROR"
 
 # Second stage for foreign architectures
 if $FOREIGN; then
@@ -146,16 +149,17 @@ echo "$HOSTNAME" | sudo tee "$DIR/etc/hostname"
 
 # Configure apt sources
 sudo mkdir -p "$DIR/etc/apt/sources.list.d"
+sudo rm -f "$DIR/etc/apt/sources.list"   # debootstrap's legacy file duplicates ubuntu.sources
 cat <<EOF | sudo tee "$DIR/etc/apt/sources.list.d/ubuntu.sources"
 Types: deb
-URIs: http://us.archive.ubuntu.com/ubuntu/
-Suites: noble noble-updates noble-backports
+URIs: $MIRROR
+Suites: $RELEASE $RELEASE-updates $RELEASE-backports
 Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
 Types: deb
-URIs: http://security.ubuntu.com/ubuntu/
-Suites: noble-security
+URIs: $MIRROR
+Suites: $RELEASE-security
 Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
@@ -190,4 +194,3 @@ sudo cp -a "$DIR/." "$MNT_DIR/."
 sudo umount "$MNT_DIR"
 
 printf "Image %s created successfully.\n" "$IMG_NAME"
-
