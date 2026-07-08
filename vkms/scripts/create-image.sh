@@ -5,6 +5,6 @@ ADDITIONAL_PACKAGES="make,git,vim,tmux,build-essential,cmake,libdrm-dev,libkmod-
 mkdir image
 
 cd image
-wget https://raw.githubusercontent.com/AnantaSrikar/linux-docs/refs/heads/master/scripts/create-image-ubuntu.sh
+wget https://raw.githubusercontent.com/AnantaSrikar/linux-docs/refs/heads/master/vkms/scripts/create-image-ubuntu.sh
 chmod +x create-image-ubuntu.sh
 ADD_PACKAGE=$ADDITIONAL_PACKAGES ./create-image-ubuntu.sh -s 20480 --feature full

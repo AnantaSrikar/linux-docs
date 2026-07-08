@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2024
-# Script to create a bootable QEMU image of Ubuntu 24.04
+# Script to create a bootable QEMU image of Ubuntu 26.04
 
 set -euxo pipefail
 
